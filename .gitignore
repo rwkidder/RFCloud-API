@@ -1,0 +1,31 @@
+# Python / FastAPI
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environment
+venv/
+.env
+
+# VSCode / IDEs
+.vscode/
+.idea/
+*.code-workspace
+
+# Logs / temp
+*.log
+.DS_Store
+*.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Cache directories
+.mypy_cache/
+.pytest_cache/
