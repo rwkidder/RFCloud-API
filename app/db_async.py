@@ -29,7 +29,19 @@ print(f"[db_async] Using DATABASE_URL: {db_url}")
 # ------------------------------------------------------------------------------
 # 3️⃣ Build async engine and session
 # ------------------------------------------------------------------------------
-engine = create_async_engine(db_url, echo=False, future=True)
+import ssl
+from sqlalchemy.ext.asyncio import create_async_engine
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False  # optional: Azure certs already validated by host
+ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+engine = create_async_engine(
+    db_url,
+    echo=False,
+    connect_args={"ssl": ssl_context},
+    future=True,
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 Base = declarative_base()
 
