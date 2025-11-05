@@ -1,12 +1,13 @@
 # app/routers/plot.py
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from io import BytesIO
 import matplotlib.pyplot as plt
 import math
-import requests
-from app.db import get_async_db
+import httpx  # async alternative to requests
+from app.db_async import get_async_db
 from app import models
 
 router = APIRouter(prefix="/plot", tags=["Visualization"])
@@ -21,17 +22,19 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-@router.get("/link/{link_id}", summary="Plot terrain and Fresnel clearance")
-def plot_link(link_id: int, db: Session = Depends(get_async_db)):
-    link = db.query(models.TopologyLink).filter(models.TopologyLink.id == link_id).first()
+@router.get("/link/{link_id}", summary="Plot terrain and Fresnel clearance (async)")
+async def plot_link(link_id: int, db: AsyncSession = Depends(get_async_db)):
+    # --- Fetch link and nodes ---
+    link = await db.scalar(select(models.TopologyLink).where(models.TopologyLink.id == link_id))
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
 
-    node_a = db.query(models.TopologyNode).filter(models.TopologyNode.id == link.node_a).first()
-    node_b = db.query(models.TopologyNode).filter(models.TopologyNode.id == link.node_b).first()
+    node_a = await db.scalar(select(models.TopologyNode).where(models.TopologyNode.id == link.node_a))
+    node_b = await db.scalar(select(models.TopologyNode).where(models.TopologyNode.id == link.node_b))
     if not node_a or not node_b:
         raise HTTPException(status_code=400, detail="Nodes missing")
 
+    # --- Compute link geometry ---
     d_km = haversine_km(node_a.lat, node_a.lon, node_b.lat, node_b.lon)
     d_m = d_km * 1000
     f_ghz = link.band_mhz / 1000.0
@@ -45,9 +48,10 @@ def plot_link(link_id: int, db: Session = Depends(get_async_db)):
               for i in range(num_samples)]
 
     try:
-        r = requests.post("https://api.open-elevation.com/api/v1/lookup", json={"locations": coords}, timeout=10)
-        r.raise_for_status()
-        elevations = [p["elevation"] for p in r.json()["results"]]
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post("https://api.open-elevation.com/api/v1/lookup", json={"locations": coords})
+            r.raise_for_status()
+            elevations = [p["elevation"] for p in r.json()["results"]]
     except Exception:
         elevations = [(node_a.elev + node_b.elev) / 2.0] * num_samples
 

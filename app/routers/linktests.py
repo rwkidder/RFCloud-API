@@ -1,32 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from app.db import get_db
+from sqlalchemy import select, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db_async import get_async_db
 from app import models
 
-router = APIRouter(prefix="/links", tags=["Reporting"])
+router = APIRouter(prefix="/async/links", tags=["Async Reporting"])
 
-@router.get("/results/{link_id}", summary="Get latest link analysis with node details")
-def get_link_results(link_id: int, db: Session = Depends(get_db)):
+@router.get("/results/{link_id}", summary="Get latest link analysis with node details (async)")
+async def get_link_results_async(link_id: int, db: AsyncSession = Depends(get_async_db)):
     # 1️⃣ Fetch link
-    link = db.query(models.TopologyLink).filter(models.TopologyLink.id == link_id).first()
+    result = await db.execute(select(models.TopologyLink).where(models.TopologyLink.id == link_id))
+    link = result.scalar_one_or_none()
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
 
     # 2️⃣ Fetch related nodes
-    node_a = db.query(models.TopologyNode).filter(models.TopologyNode.id == link.node_a).first()
-    node_b = db.query(models.TopologyNode).filter(models.TopologyNode.id == link.node_b).first()
-
+    node_a = await db.get(models.TopologyNode, link.node_a)
+    node_b = await db.get(models.TopologyNode, link.node_b)
     if not node_a or not node_b:
         raise HTTPException(status_code=400, detail="Nodes not found for link")
 
     # 3️⃣ Get most recent result
-    result = (
-        db.query(models.RFLinkResult)
-        .filter(models.RFLinkResult.link_id == link_id)
+    result = await db.execute(
+        select(models.RFLinkResult)
+        .where(models.RFLinkResult.link_id == link_id)
         .order_by(desc(models.RFLinkResult.calculated_at))
-        .first()
+        .limit(1)
     )
+    latest = result.scalar_one_or_none()
 
     # 4️⃣ Construct response JSON
     response = {
@@ -55,13 +56,13 @@ def get_link_results(link_id: int, db: Session = Depends(get_db)):
             "radio_profile": node_b.radio_profile,
         },
         "analysis": {
-            "id": result.id if result else None,
-            "fspl_db": result.fspl_db if result else None,
-            "received_power_dbm": result.received_power_dbm if result else None,
-            "link_margin_db": result.link_margin_db if result else None,
-            "fresnel_clearance_m": result.fresnel_clearance_m if result else None,
-            "is_clear": result.is_clear if result else None,
-            "calculated_at": result.calculated_at.isoformat() if result else None,
+            "id": latest.id if latest else None,
+            "fspl_db": latest.fspl_db if latest else None,
+            "received_power_dbm": latest.received_power_dbm if latest else None,
+            "link_margin_db": latest.link_margin_db if latest else None,
+            "fresnel_clearance_m": latest.fresnel_clearance_m if latest else None,
+            "is_clear": latest.is_clear if latest else None,
+            "calculated_at": latest.calculated_at.isoformat() if latest else None,
         },
     }
 
