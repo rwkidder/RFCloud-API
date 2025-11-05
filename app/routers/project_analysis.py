@@ -46,7 +46,9 @@ async def summarize_project(project_id: int, db: AsyncSession = Depends(get_asyn
         "project_id": project_id,
         "link_count": len(links),
         "avg_margin_db": round(stats.avg_margin or 0, 2),
-        "clear_ratio": round(((stats.clear_links or 0) / len(links)), 2),
+     #   "clear_ratio": round(((stats.clear_links or 0) / len(links)), 2),
+        "clear_ratio": round(((stats.clear_links or 0) / stats.n_results), 2),
+
         "results_recorded": stats.n_results or 0,
     }
 
