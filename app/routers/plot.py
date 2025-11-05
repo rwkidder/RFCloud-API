@@ -6,7 +6,7 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import math
 import requests
-from app.db import get_db
+from app.db import get_async_db
 from app import models
 
 router = APIRouter(prefix="/plot", tags=["Visualization"])
@@ -22,7 +22,7 @@ def haversine_km(lat1, lon1, lat2, lon2):
 
 
 @router.get("/link/{link_id}", summary="Plot terrain and Fresnel clearance")
-def plot_link(link_id: int, db: Session = Depends(get_db)):
+def plot_link(link_id: int, db: Session = Depends(get_async_db)):
     link = db.query(models.TopologyLink).filter(models.TopologyLink.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Link not found")
