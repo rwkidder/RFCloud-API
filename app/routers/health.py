@@ -1,13 +1,16 @@
+# app/routers/health.py
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from app.db_async import get_async_db
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
-@router.get("/", summary="Simple service and database health check")
-def health_check(db: Session = Depends(get_async_db)):
+@router.get("/", summary="Service and database health check")
+async def health_check(db: AsyncSession = Depends(get_async_db)):
     try:
-        result =conn.execute(text("SELECT version();"))
-        return {"status": "ok", "database": "connected", "version": result}
+        result = await db.execute(text("SELECT version();"))
+        version = result.scalar_one()
+        return {"status": "ok", "database": "connected", "version": version}
     except Exception as e:
         return {"status": "error", "database": "unreachable", "detail": str(e)}
